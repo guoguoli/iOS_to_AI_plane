@@ -39,3 +39,29 @@ def generate_student_no() -> str:
     year = datetime.now().year
     count = len(students_db)+1
     return f"CD{year}{count:04d}"
+courses_db: Dict[int, dict] = {
+    # 1: Course(id=1, name="Python基础", teacher="张老师", capacity=30, enrolled=15),
+    # 2: Course(id=2, name="FastAPI实战", teacher="李老师", capacity=20, enrolled=10),
+    # 3: Course(id=3, name="AI应用开发", teacher="王老师", capacity=25, enrolled=8),
+    1: {
+        "id":1,
+        "name":"Python基础",
+        "teacher":"张老师",
+        "capacity":30,
+        "enrolled":0
+    },
+    2: {
+        "id":2,
+        "name":"FastAPI实战",
+        "teacher":"李老师",
+        "capacity":20,
+        "enrolled":0
+    },
+    3: {
+        "id":3,
+        "name":"AI应用开发",
+        "teacher":"王老师",
+        "capacity":25,
+        "enrolled":0
+    }
+}

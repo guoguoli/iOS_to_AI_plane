@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from routers.students import router as students_router
+from routers.course import router as course_router
 
 app = FastAPI(
     title="学生管理系统",
@@ -7,6 +8,7 @@ app = FastAPI(
     version="1.0.0"
 )
 app.include_router(students_router)
+app.include_router(course_router)
 
 @app.get("/")
 def root():

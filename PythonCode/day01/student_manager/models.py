@@ -53,6 +53,41 @@ class StudentListResponse(BaseModel):
     page_size:int
     students:list[Student]
 
+class EnrollmentStatus(str, Enum):
+    enrolled = "enrolled"   # 已选课
+    completed = "completed" #已完成
+    cancelled = "cancelled" #已退课
+class Course(BaseModel):
+    #课程模型
+    id:int
+    name:str = Field(...,description="课程名称")
+    teacher:str = Field(...,description="授课教师")
+    capacity:int = Field(default=30,ge=1,description="课程容量")
+    enrolled:int = Field(default=0,ge=0,description="已选人数")
+class Enrollment(BaseModel):
+    #选课记录
+    id:int
+    student_id:int = Field(...,description="学生ID")
+    course_id:int = Field(...,description="课程ID")
+    enrolled_at:datetime = Field(default_factory=datetime.now,description="选课时间")
+    status:EnrollmentStatus = Field(EnrollmentStatus.enrolled,description="选课状态")
+    model_config = ConfigDict(
+        use_enum_values=True
+    )
+    
+class EnrollmentCreate(BaseModel):
+    #创建选课记录的请求模型
+    student_id:int = Field(...,description="学生ID")
+    course_id:int = Field(...,description="课程ID")
 
-
+class EnrollmentResponse(BaseModel):
+    id:int
+    student_id:int
+    course_id:int
+    course_name:str
+    enrolled_at:datetime
+    status:EnrollmentStatus
+    model_config = ConfigDict(
+        use_enum_values=True
+    )
 

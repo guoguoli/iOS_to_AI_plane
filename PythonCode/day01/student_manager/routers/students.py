@@ -27,7 +27,7 @@ def list_students(
         ]
     if status:
         students = [s for s in students if s["status"] == status.value]
-    students.sort(key=lambda x:x["creatd_at"],reverse=True)
+    students.sort(key=lambda x:x["created_at"],reverse=True)
 
     total = len(students)
     start = (page-1)*page_size
