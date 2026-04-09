@@ -25,4 +25,4 @@ if __name__ == "__main__":
     # from pyngrok import ngrok
     # public_url = ngrok.connect(8000)
     # print("✅ 外网访问地址：", public_url)
-    uvicorn.run(app,host="127.0.0.1",port=8000)
+    uvicorn.run(app,host="0.0.0.0",port=8000)

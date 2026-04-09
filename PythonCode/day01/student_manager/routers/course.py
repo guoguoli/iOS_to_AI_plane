@@ -23,6 +23,7 @@ def list_courses(
     page_courses = [Course(**c) for c in page_courses_dict]
     total = len(courses)
     return {"total":total,"page":page,"page_size":page_size,"courses":page_courses}
-    
+#@router.post("/enrollments",status_code=201,response_model=Enrollment,summary="选课") 
+
    
 
