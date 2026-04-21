@@ -178,6 +178,4 @@ def test_autospec_mock():
     # mock_ai.correct_homework("text", extra_param="value")  # 会抛出TypeError
     
     print("✅ Autospec Mock测试通过")
-test_homework_correction_with_mock()
-test_mock_advanced_features()
-test_autospec_mock()
+

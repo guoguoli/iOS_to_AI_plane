@@ -126,4 +126,4 @@ def test_calculate_grade_with_driver():
     # 断言
     assert report["passed"] == report["total"], f"测试失败: {report}"
     print(f"✅ Test Driver测试通过: {report['pass_rate']}")
-test_calculate_grade_with_driver()
+

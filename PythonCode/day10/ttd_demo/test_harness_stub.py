@@ -172,5 +172,3 @@ def test_grade_service_with_magic_mock():
     mock_repo.get_student_grades.assert_called_once_with("any_student")
     
     print("✅ Magic Mock测试通过")
-test_grade_service_with_stub()
-test_grade_service_with_magic_mock()
