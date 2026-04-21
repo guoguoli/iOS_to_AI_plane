@@ -1,0 +1,15 @@
+[tool.poetry]
+name = "edu-ai-question-bank"
+version = "1.0.0"
+description = "成都教育科技AI题库服务"
+authors = ["EduTech Team"]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.109.0"
+uvicorn = {extras = ["standard"], version = "^0.27.0"}
+pydantic = "^2.5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
