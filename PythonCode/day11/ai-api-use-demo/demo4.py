@@ -58,7 +58,76 @@ def count_tokens_messages(
     total_tokens += 3
     
     return total_tokens
-
+def truncate_messages(
+    messages: List[Dict[str, str]], 
+    max_tokens: int
+) -> List[Dict[str, str]]:
+    """
+    智能截断消息列表，保留最近的消息直到不超过max_tokens
+    
+    Args:
+        messages: 原始消息列表
+        max_tokens: 最大Token数
+        
+    Returns:
+        截断后的消息列表
+    """
+    # 保留系统提示（通常在开头）
+    system_message = messages[0] if messages and messages[0]["role"] == "system" else None
+    
+    # 非系统消息
+    conversation = messages[1:] if system_message else messages
+    
+    result = []
+    total_tokens = 0
+    
+    # 从最新消息开始，逆序添加
+    for message in reversed(conversation):
+        msg_tokens = 4 + count_tokens_cn(message.get("content", ""))
+        
+        if total_tokens + msg_tokens <= max_tokens:
+            result.insert(0, message)
+            total_tokens += msg_tokens
+        else:
+            break
+    
+    # 重新添加系统消息
+    if system_message and system_message["content"]:
+        system_tokens = 4 + count_tokens_cn(system_message["content"])
+        if total_tokens + system_tokens <= max_tokens:
+            result.insert(0, system_message)
+    
+    return result
+# 降级策略示例
+class ModelFallback:
+    """
+    模型降级管理器
+    当主模型不可用时，自动切换到备用模型
+    
+    iOS类比：网络请求的降级策略（WiFi→蜂窝→离线缓存）
+    """
+    
+    def __init__(self):
+        # 优先级从高到低
+        self.models = [
+            {"name": "qwen-turbo", "provider": "aliyun", "priority": 1},
+            {"name": "qwen-plus", "provider": "aliyun", "priority": 2},
+            {"name": "ernie-4.0", "provider": "baidu", "priority": 3},  # 文心一言备选
+        ]
+    
+    def get_available_model(self, error: Exception) -> dict:
+        """
+        根据错误类型返回可用的备用模型
+        """
+        if "rate" in str(error).lower():
+            # Rate Limit：尝试其他模型
+            return self.models[1] if len(self.models) > 1 else self.models[0]
+        elif "timeout" in str(error).lower():
+            # 超时：尝试更快的模型
+            return self.models[0]
+        else:
+            # 其他错误：尝试备用服务商
+            return self.models[2] if len(self.models) > 2 else self.models[0]
 # ============ 使用示例 ============
 if __name__ == "__main__":
     # 单段文本计算
