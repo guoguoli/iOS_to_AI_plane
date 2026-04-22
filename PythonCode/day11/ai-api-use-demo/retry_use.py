@@ -11,7 +11,7 @@ import time
 import random
 from functools import wraps
 from typing import Callable, Any
-from dashscope import CallBackException
+import os
 
 def with_retry(max_attempts: int = 3, base_delay: float = 1.0):
     """

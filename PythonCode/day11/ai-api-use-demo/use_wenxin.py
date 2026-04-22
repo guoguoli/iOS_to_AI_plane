@@ -16,7 +16,7 @@ erniebot.api_key = os.getenv("ERNIE_API_KEY")
 
 def ernie_chat(
     messages: list,
-    model: str = "ernie-bot-4",
+    model: str = "ernie-4.0",
     max_tokens: int = 1024
 ) -> dict:
     """
