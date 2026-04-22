@@ -39,7 +39,7 @@ def correct_math_homework(question, student_answer):
         "结果":content,
         "输入token数":input_tokens,
         "输出token数":output_tokens,
-        "本次成本(元)":round(cost,6)
+        "本次成本(元)":round(cost/1000,6)
     }
 if __name__ == '__main__':
     question1 = "计算题：25×(40+4)"
