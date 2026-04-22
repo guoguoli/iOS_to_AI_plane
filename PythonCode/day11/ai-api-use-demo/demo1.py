@@ -2,20 +2,22 @@
 通义千问（Qwen）API 调用示例
 
 安装依赖：
-    pip install dashscope
+    pip install dashscope python-dotenv
 
-环境变量设置：
-    export DASHSCOPE_API_KEY="your-api-key"
-    或在代码中设置：dashscope.api_key = "your-api-key"
+.env 文件配置：
+    DASHSCOPE_API_KEY=your-api-key
 """
+
+import os
+from dotenv import load_dotenv
+
+# 从 .env 文件加载环境变量
+load_dotenv()
 
 # 导入 dashscope 库（阿里云通义千问 SDK）
 import dashscope
 from dashscope import Generation
 from dashscope.api_entities.dashscope_response import GenerationResponse
-
-# 可选：设置 API Key
-# dashscope.api_key = 'your-api-key'
 
 
 def test_connection():
@@ -25,7 +27,7 @@ def test_connection():
     ]
 
     response = Generation.call(
-        model=dashscope.Generation.Models.qwen_max,  # 或 qwen_plus, qwen_turbo
+        model=dashscope.Generation.Models.qwen_turbo,  # 或 qwen_plus, qwen_turbo
         messages=messages,
         result_format='message'
     )
