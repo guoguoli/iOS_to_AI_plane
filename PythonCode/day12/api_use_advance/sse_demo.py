@@ -1,6 +1,7 @@
 import dashscope
 from dashscope import Generation 
 import os
+import time
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -68,7 +69,67 @@ def stream_with_thinking():
             break
     
     print("\n")
-if __name__ == '__main__':
-    # basic_stream_example()
-    stream_with_thinking()
+class StreamingChat:
+    """带打字机效果的流式聊天"""
+    
+    def __init__(self):
+        self.conversation_history = []
+    
+    def chat(self, user_input: str) -> str:
+        """流式对话"""
+        
+        # 添加用户消息到历史
+        self.conversation_history.append({
+            'role': 'user',
+            'content': user_input
+        })
+        
+        print(f"\n👤 你: {user_input}\n")
+        print("🤖 AI: ", end='', flush=True)
+        
+        # 流式调用
+        responses = Generation.call(
+            model='qwen-turbo',
+            messages=self.conversation_history,
+            stream=True,
+            incremental_output=True,
+            result_format='message'
+            
+        )
+        
+        full_response = ""
+        for response in responses:
+            if response.status_code == 200:
+                content = response.output.choices[0].message.content
+                if content:
+                    print(content, end='', flush=True)
+                    full_response += content
+                    time.sleep(0.02)  # 打字机效果延时
+            else:
+                print(f"\n错误: {response.code}")
+                break
+        
+        print()
+        
+        # 保存AI回复到历史
+        self.conversation_history.append({
+            'role': 'assistant',
+            'content': full_response
+        })
+        
+        return full_response
+    
+    def clear_history(self):
+        """清空对话历史"""
+        self.conversation_history = []
+
+# 使用示例
+if __name__ == "__main__":
+    chat = StreamingChat()
+    
+    while True:
+        user_input = input("\n你: ")
+        if user_input.lower() in ['quit', 'exit', '退出']:
+            break
+        chat.chat(user_input)
 
