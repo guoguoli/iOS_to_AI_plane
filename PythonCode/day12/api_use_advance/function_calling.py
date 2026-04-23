@@ -179,15 +179,17 @@ class FunctionCallingDemo:
         # 检查是否有函数调用
         print(f"\n🔧 检查是否有函数调用...")
         print(response.output)
-        tool_calls = response.output.choices[0].message.tool_calls
+        # message 是 dict，用 .get() 安全取 tool_calls（无 function call 时该字段不存在）
+        tool_calls = response.output.choices[0].message.get('tool_calls')
         
         if tool_calls:
             # 处理函数调用
             for tool_call in tool_calls:
                 print('函数调用')
                 print(tool_call)
-                function_name = tool_call.function.name
-                arguments = json.loads(tool_call.function.arguments)
+                # tool_call 是 dict，使用字典方式访问
+                function_name = tool_call['function']['name']
+                arguments = json.loads(tool_call['function']['arguments'])
                 
                 print(f"\n🔧 调用函数: {function_name}")
                 print(f"📋 参数: {arguments}")
@@ -201,14 +203,15 @@ class FunctionCallingDemo:
                     
                     print(f"📊 查询结果: {result}")
                     
-                    # 将函数结果返回给模型
+                    # 将函数结果返回给模型（assistant 消息需包含 tool_calls）
                     messages.append({
                         "role": "assistant",
-                        "content": ""
+                        "content": "",
+                        "tool_calls": tool_calls
                     })
                     messages.append({
                         "role": "tool",
-                        "tool_call_id": tool_call.id,
+                        "tool_call_id": tool_call['id'],
                         "name": function_name,
                         "content": json.dumps(result, ensure_ascii=False)
                     })
