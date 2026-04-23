@@ -11,9 +11,12 @@ from typing import Optional, Dict, List
 from dataclasses import dataclass, asdict
 import sqlite3
 
-from dashscope import Generation
-from qwen_vl_utils import process_vlm_image
+from dashscope import Generation, MultiModalConversation
+import dashscope
+from dotenv import load_dotenv
+load_dotenv()
 
+dashscope.api_key = os.getenv('DASHSCOPE_API_KEY')
 # ============================================================
 # 数据模型
 # ============================================================
@@ -65,7 +68,7 @@ class QwenVLService:
         
         # 构建提示词
         prompt = self._build_prompt(subject)
-        
+        abs_image_path = os.path.abspath(image_path)
         # 调用视觉模型
         # 注意：实际使用需要安装 qwen-vl-utils
         try:
@@ -73,15 +76,16 @@ class QwenVLService:
                 {
                     "role": "user",
                     "content": [
-                        {"image": image_path},
+                        {"image": f"file://{abs_image_path}"},
                         {"text": prompt}
                     ]
                 }
             ]
-            
-            response = Generation.call(
+            print(messages)
+            response = MultiModalConversation.call(
                 model=self.model,
                 messages=messages,
+                result_format = "message",
                 temperature=0.1  # 低随机性，保证准确性
             )
             
@@ -107,6 +111,7 @@ class QwenVLService:
         
         prompts = {
             "math": """你是一位资深数学老师，请仔细分析这张数学作业图片：
+0. 如果图片不是数学作业依然返回JSON格式的分析结果每个字段使用模板提供的第一个值
 1. 识别作业中的所有题目和学生的作答
 2. 判断每题的对错
 3. 对于错题，给出正确的解题思路
@@ -209,10 +214,20 @@ class HomeworkChecker:
                 explanation="",
                 related_knowledge=[]
             )
-        
+        print("=" * 60)
+        print(analysis)
+        print("=" * 60)
+
         # 解析分析结果
         try:
-            result_text = analysis["result"]
+            # result_text = analysis["result"]
+            # 🔥 关键修复：从列表中取出 text 字符串
+            result_list = analysis["result"]
+            # 取第一个元素的 text 内容
+            if isinstance(result_list, list) and len(result_list) > 0:
+                result_text = result_list[0]["text"]
+            else:
+               raise ValueError("模型返回的 result 格式不正确")
             # 尝试提取JSON（可能包含在markdown代码块中）
             if "```json" in result_text:
                 json_str = result_text.split("```json")[1].split("```")[0]
