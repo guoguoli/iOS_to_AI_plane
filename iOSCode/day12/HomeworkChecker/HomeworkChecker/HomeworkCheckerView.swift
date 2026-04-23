@@ -132,7 +132,7 @@ class HomeworkAPIService {
     static let shared = HomeworkAPIService()
     
     func checkHomework(imageBase64: String, subject: String) async throws -> CorrectionResult {
-        let url = URL(string: "http://localhost:8000/api/check")!
+        let url = URL(string: "http://127.0.0.1:8000/api/check")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         
@@ -184,7 +184,7 @@ struct SubjectPicker: View {
     }
 }
 
-struct ImagePicker: UIViewControllerRepresentable {
+struct ImagePicker: View {
     @Binding var image: UIImage?
     @State private var showingPicker = false
     

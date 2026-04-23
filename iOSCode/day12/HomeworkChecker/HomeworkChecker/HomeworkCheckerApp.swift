@@ -11,7 +11,7 @@ import SwiftUI
 struct HomeworkCheckerApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            HomeworkCheckerView()
         }
     }
 }
