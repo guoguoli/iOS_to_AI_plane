@@ -415,7 +415,7 @@ async def get_report(student_name: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+       uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
 print("✅ 作业批改助手核心模块已定义")
