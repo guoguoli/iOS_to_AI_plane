@@ -562,3 +562,196 @@ def optimize_api_call(prompt: str, model: str = 'qwen-plus',
     # monitor.record_call(model, tokens_in, tokens_out, latency, success)
     
     return result
+class EducationGradingOptimizer:
+    """
+    教育科技智能批改系统成本优化器
+    
+    成都教育科技场景实战
+    """
+    
+    def __init__(self, daily_budget: float = 500.0):
+        self.counter = TokenCounter()
+        self.cache = SemanticCache(similarity_threshold=0.85)
+        self.monitor = APIMonitor(daily_cost_limit=daily_budget)
+        self.controller = CostController(daily_limit=daily_budget)
+        
+        # 教育场景特定配置
+        self.subject_cache_ttl = {
+            'math': 86400,      # 数学：24小时
+            'chinese': 172800,  # 语文：48小时
+            'english': 172800   # 英语：48小时
+        }
+    
+    def optimize_grading_prompt(self, student_answer: dict) -> str:
+        """
+        优化批改Prompt
+        
+        原始格式：详细的富文本描述
+        优化格式：简洁的结构化数据
+        """
+        # 简化题目描述
+        simplified_items = []
+        for item in student_answer.get('items', []):
+            question = item['question']
+            answer = item['student_answer']
+            
+            # 标准化格式
+            simplified = f"[{question} → {answer}]"
+            simplified_items.append(simplified)
+        
+        return ', '.join(simplified_items)
+    
+    def grade_homework(self, homework_data: dict, 
+                      user_id: str) -> dict:
+        """
+        智能批改核心方法
+        
+        整合所有优化策略
+        """
+        start_time = time.time()
+        
+        result = {
+            'homework_id': homework_data.get('id'),
+            'student_id': homework_data.get('student_id'),
+            'items': [],
+            'summary': {}
+        }
+        
+        # Step 1: 优化Prompt
+        optimized_prompt = self.optimize_grading_prompt(homework_data)
+        
+        # Step 2: Token分析
+        token_info = self.counter.estimate_cost_from_text(
+            'qwen-plus', optimized_prompt)
+        
+        # Step 3: 成本检查
+        can_proceed, reason = self.controller.can_call(
+            'qwen-plus', token_info['input_tokens'], user_id)
+        
+        if not can_proceed:
+            return {
+                'error': 'QUOTA_EXCEEDED',
+                'message': f'用户{user_id}今日配额已用完',
+                'suggestion': '请明天再来或联系老师'
+            }
+        
+        # Step 4: 缓存检查
+        cache_result = self.cache.get(optimized_prompt)
+        
+        if cache_result:
+            result['items'] = cache_result.get('items', [])
+            result['from_cache'] = True
+            result['cost'] = 0.0
+        else:
+            # Step 5: API调用（实际实现需要API密钥）
+            # response = self._call_grading_api(optimized_prompt)
+            
+            # 模拟API响应
+            response = {
+                'items': [
+                    {'correct': True, 'score': 10, 'feedback': '正确'}
+                    for _ in homework_data.get('items', [])
+                ],
+                'total_score': len(homework_data.get('items', [])) * 10
+            }
+            
+            result['items'] = response['items']
+            result['from_cache'] = False
+            result['cost'] = token_info['estimated_cost']
+            
+            # Step 6: 存储缓存
+            self.cache.set(optimized_prompt, response, 
+                          ttl=self.subject_cache_ttl.get('math', 86400))
+        
+        # Step 7: 计算汇总
+        correct_count = sum(1 for item in result['items'] if item.get('correct'))
+        total_count = len(result['items'])
+        
+        result['summary'] = {
+            'correct': correct_count,
+            'total': total_count,
+            'accuracy': f"{(correct_count/total_count*100) if total_count > 0 else 0:.1f}%",
+            'processing_time': f"{time.time() - start_time:.3f}秒",
+            'cached': result.get('from_cache', False)
+        }
+        
+        # Step 8: 记录监控
+        self.monitor.record_call(
+            model='qwen-plus',
+            tokens_in=token_info['input_tokens'],
+            tokens_out=token_info['output_tokens'],
+            latency=time.time() - start_time,
+            success=True
+        )
+        
+        return result
+    
+    def get_cost_report(self, user_id: str = None) -> dict:
+        """获取成本报告"""
+        daily_stats = self.monitor.get_daily_stats()
+        cache_stats = self.cache.get_cache_stats()
+        budget_status = self.controller.get_remaining_budget()
+        
+        report = {
+            '日期': daily_stats['date'],
+            'API调用统计': {
+                '总调用次数': daily_stats['total_calls'],
+                '总Token消耗': daily_stats['total_tokens'],
+                '总成本': f"{daily_stats['total_cost']:.4f}元",
+                '平均延迟': f"{daily_stats['avg_latency']:.3f}秒"
+            },
+            '缓存统计': {
+                '命中率': cache_stats['hit_rate'],
+                '节省成本': f"约{cache_stats['hits'] * 0.01:.2f}元（按平均成本估算）"
+            },
+            '预算状态': {
+                '日预算': f"{budget_status['daily_limit']:.2f}元",
+                '已使用': f"{budget_status['daily_spent']:.2f}元",
+                '剩余': f"{budget_status['daily_remaining']:.2f}元",
+                '使用率': budget_status['usage_percentage']
+            }
+        }
+        
+        # 添加告警信息
+        alerts = self.monitor.check_alerts()
+        if alerts:
+            report['告警'] = alerts
+        
+        return report
+
+
+# 使用示例
+def demo_grading_system():
+    """演示智能批改系统"""
+    optimizer = EducationGradingOptimizer(daily_budget=500.0)
+    
+    # 模拟作业数据
+    homework = {
+        'id': 'HW20240115001',
+        'student_id': 'STU001',
+        'subject': 'math',
+        'items': [
+            {'question': '12+8=?', 'student_answer': '20'},
+            {'question': '15-7=?', 'student_answer': '8'},
+            {'question': '3×4=?', 'student_answer': '12'},
+            {'question': '20÷5=?', 'student_answer': '4'}
+        ]
+    }
+    
+    # 执行批改
+    result = optimizer.grade_homework(homework, user_id='STU001')
+    
+    print("批改结果：")
+    print(f"正确: {result['summary']['correct']}/{result['summary']['total']}")
+    print(f"正确率: {result['summary']['accuracy']}")
+    print(f"处理时间: {result['summary']['processing_time']}")
+    print(f"来自缓存: {result['summary']['cached']}")
+    
+    # 获取成本报告
+    report = optimizer.get_cost_report()
+    print("\n成本报告：")
+    print(json.dumps(report, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    demo_grading_system()
