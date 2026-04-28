@@ -672,3 +672,105 @@ class AIInferenceTask(Observable):
             }
         else:
             raise Exception(f"API错误: {response.message}")
+        
+class MultiComponentCoordinator(Observable):
+    """
+    多组件协调器
+    
+    协调UI、日志、监控等多个组件
+    """
+    
+    def __init__(self):
+        super().__init__()
+        self.ui_updates: List[Dict] = []
+        self.log_entries: List[Dict] = []
+        self.metrics: Dict[str, Any] = {}
+    
+    def attach_ui_observer(self, observer: Observer):
+        """添加UI观察者"""
+        self.attach(observer)
+    
+    def attach_log_observer(self, observer: Observer):
+        """添加日志观察者"""
+        self.attach(observer)
+    
+    def emit(self, component: str, event: str, data: Any):
+        """发出事件"""
+        event_data = {
+            "component": component,
+            "event": event,
+            "data": data,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+        # 分类存储
+        if component == "ui":
+            self.ui_updates.append(event_data)
+        elif component == "log":
+            self.log_entries.append(event_data)
+        elif component == "metrics":
+            self.metrics.update(data)
+        
+        # 通知所有观察者
+        self.notify(f"{component}:{event}", event_data)
+
+
+class UIUpdateObserver(Observer):
+    """UI更新观察者"""
+    
+    def __init__(self):
+        self.updates: List[Dict] = []
+    
+    def on_update(self, event: str, data: Any):
+        """处理UI更新"""
+        if event.startswith("ui:"):
+            self.updates.append(data)
+            print(f"[UI观察者] 更新: {event}")
+            print(f"  数据: {data.get('data', {})}")
+
+
+class LoggingObserver(Observer):
+    """日志记录观察者"""
+    
+    def __init__(self, log_file: str = "ai_inference.log"):
+        self.log_file = log_file
+    
+    def on_update(self, event: str, data: Any):
+        """记录日志"""
+        log_entry = f"[{data.get('timestamp', '')}] {event}: {data}\n"
+        with open(self.log_file, "a", encoding="utf-8") as f:
+            f.write(log_entry)
+        print(f"[日志观察者] 记录: {event}")
+
+
+class MetricsObserver(Observer):
+    """性能指标观察者"""
+    
+    def __init__(self):
+        self.metrics: Dict[str, List[float]] = {}
+    
+    def on_update(self, event: str, data: Any):
+        """收集指标"""
+        if "progress" in event:
+            progress = data.get("data", {}).get("progress", 0)
+            self._record_metric("inference_progress", progress)
+        
+        elif "complete" in event:
+            self._record_metric("inference_count", 1)
+    
+    def _record_metric(self, name: str, value: float):
+        """记录指标"""
+        if name not in self.metrics:
+            self.metrics[name] = []
+        self.metrics[name].append(value)
+    
+    def get_summary(self) -> Dict:
+        """获取指标摘要"""
+        summary = {}
+        for name, values in self.metrics.items():
+            if name == "inference_count":
+                summary[name] = sum(values)
+            else:
+                summary[f"{name}_avg"] = sum(values) / len(values) if values else 0
+                summary[f"{name}_latest"] = values[-1] if values else 0
+        return summary
