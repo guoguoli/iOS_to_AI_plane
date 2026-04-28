@@ -7,6 +7,8 @@ import dashscope
 from dashscope import Generation
 from dotenv import load_dotenv
 
+from pipeline import AIInferenceStage, FeatureExtractionStage, Pipeline, PostprocessStage, PreprocessStage
+
 load_dotenv()
 
 dashscope.api_key = os.getenv("DASHSCOPE_API_KEY")
@@ -774,3 +776,66 @@ class MetricsObserver(Observer):
                 summary[f"{name}_avg"] = sum(values) / len(values) if values else 0
                 summary[f"{name}_latest"] = values[-1] if values else 0
         return summary
+    
+class HybridAIArchitecture:
+    """
+    混合AI架构
+    
+    结合状态机、管道、观察者三种模式
+    适用于复杂的AI应用场景
+    """
+    
+    def __init__(self, task_id: str):
+        self.task_id = task_id
+        
+        # 状态机：管理任务状态
+        self.state_machine = ParallelStateMachine(task_id)
+        
+        # 管道：组织处理流程
+        self.pipeline = Pipeline([
+            PreprocessStage(),
+            FeatureExtractionStage(),
+            AIInferenceStage(),
+            PostprocessStage()
+        ])
+        
+        # 观察者：通知进度
+        self.progress_observer = InferenceProgressObserver("主进度")
+        self.state_machine.add_listener(self._on_state_change)
+        
+        self.state_machine.parallel_state.context["task_id"] = task_id
+    
+    def _on_state_change(self, task_id: str, event: str, states: List[str]):
+        """状态变化回调"""
+        self.progress_observer.on_update("state_change", {
+            "task_id": task_id,
+            "event": event,
+            "states": states
+        })
+    
+    async def execute(self, input_data: Any) -> Dict:
+        """执行混合架构流程"""
+        # 启动状态机
+        self.state_machine.transition("start", states_to_add=["running"])
+        
+        try:
+            # 执行管道
+            context = self.state_machine.parallel_state.context
+            result = self.pipeline.process(input_data, context)
+            
+            # 更新状态
+            self.state_machine.transition(
+                "complete",
+                states_to_remove=["running"],
+                states_to_add=["completed"]
+            )
+            
+            return result
+        
+        except Exception as e:
+            self.state_machine.transition(
+                "error",
+                states_to_remove=["running"],
+                states_to_add=["failed"]
+            )
+            raise
