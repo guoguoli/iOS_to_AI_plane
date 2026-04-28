@@ -510,3 +510,165 @@ class AIConversationStateMachine:
             "response": "让我帮您查找批改结果...",
             "action": "fetch_results"
         }
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List, Optional
+import threading
+
+
+class Observer(ABC):
+    """观察者抽象基类"""
+    
+    @abstractmethod
+    def on_update(self, event: str, data: Any):
+        """接收更新通知"""
+        pass
+
+
+class InferenceProgressObserver(Observer):
+    """推理进度观察者"""
+    
+    def __init__(self, name: str):
+        self.name = name
+    
+    def on_update(self, event: str, data: Any):
+        """处理推理进度更新"""
+        if event == "progress":
+            progress = data.get("progress", 0)
+            stage = data.get("stage", "")
+            print(f"[{self.name}] 进度更新: {stage} - {progress*100:.1f}%")
+        elif event == "complete":
+            print(f"[{self.name}] 推理完成: {data}")
+        elif event == "error":
+            print(f"[{self.name}] 推理错误: {data}")
+
+
+class Observable:
+    """
+    可观察对象
+    
+    iOS类比：类似Combine的Publisher
+    支持同步和异步通知
+    """
+    
+    def __init__(self):
+        self._observers: List[Observer] = []
+        self._lock = threading.Lock()
+    
+    def attach(self, observer: Observer):
+        """添加观察者"""
+        with self._lock:
+            if observer not in self._observers:
+                self._observers.append(observer)
+                print(f"观察者已添加: {observer.name}")
+    
+    def detach(self, observer: Observer):
+        """移除观察者"""
+        with self._lock:
+            if observer in self._observers:
+                self._observers.remove(observer)
+                print(f"观察者已移除: {observer.name}")
+    
+    def notify(self, event: str, data: Any):
+        """通知所有观察者"""
+        with self._lock:
+            observers_copy = self._observers.copy()
+        
+        for observer in observers_copy:
+            try:
+                observer.on_update(event, data)
+            except Exception as e:
+                print(f"通知观察者失败: {e}")
+
+
+class AIInferenceTask(Observable):
+    """
+    AI推理任务（可观察对象）
+    
+    支持多阶段推理、进度通知、错误处理
+    """
+    
+    def __init__(self, task_id: str, model_name: str = "qwen-plus"):
+        super().__init__()
+        self.task_id = task_id
+        self.model_name = model_name
+        self.state = "pending"
+        self.progress = 0.0
+        self.result: Optional[Dict] = None
+        self.error: Optional[str] = None
+    
+    def set_progress(self, progress: float, stage: str = ""):
+        """更新进度"""
+        self.progress = progress
+        self.notify("progress", {
+            "task_id": self.task_id,
+            "progress": progress,
+            "stage": stage,
+            "state": self.state
+        })
+    
+    def start_inference(self, prompt: str) -> Dict:
+        """开始推理"""
+        self.state = "running"
+        self.set_progress(0.1, "准备阶段")
+        
+        try:
+            # 阶段1：Prompt预处理
+            self.set_progress(0.2, "Prompt预处理")
+            processed_prompt = self._preprocess_prompt(prompt)
+            
+            # 阶段2：API调用
+            self.set_progress(0.4, "发送请求")
+            response = self._call_api(processed_prompt)
+            
+            # 阶段3：响应解析
+            self.set_progress(0.8, "解析响应")
+            result = self._parse_response(response)
+            
+            # 完成
+            self.set_progress(1.0, "完成")
+            self.state = "completed"
+            self.result = result
+            
+            self.notify("complete", {
+                "task_id": self.task_id,
+                "result": result
+            })
+            
+            return result
+        
+        except Exception as e:
+            self.state = "failed"
+            self.error = str(e)
+            self.notify("error", {
+                "task_id": self.task_id,
+                "error": str(e)
+            })
+            raise
+    
+    def _preprocess_prompt(self, prompt: str) -> str:
+        """预处理Prompt"""
+        # 模拟处理
+        return prompt.strip()
+    
+    def _call_api(self, prompt: str) -> Generation:
+        """调用通义千问API"""
+        # 模拟API调用
+        return Generation.call(
+            model=self.model_name,
+            api_key=os.getenv("DASHSCOPE_API_KEY"),
+            messages=[
+                {"role": "user", "content": prompt}
+            ],
+            result_format='message'
+        )
+    
+    def _parse_response(self, response) -> Dict:
+        """解析响应"""
+        if response.status_code == 200:
+            return {
+                "content": response.output.choices[0].message.content,
+                "model": self.model_name,
+                "task_id": self.task_id
+            }
+        else:
+            raise Exception(f"API错误: {response.message}")
