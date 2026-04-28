@@ -1,6 +1,13 @@
+import os
 from typing import Any, Dict, List, Optional
 from abc import ABC, abstractmethod
 import json
+from dotenv import load_dotenv
+from dashscope import Generation
+
+load_dotenv()
+
+
 
 
 class PipelineStage(ABC):
