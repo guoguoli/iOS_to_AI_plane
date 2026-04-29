@@ -183,7 +183,9 @@ class ConversationManager:
             # 这里简化为滑动窗口
             messages = self._window_messages(messages)
             self._active_contexts[session_id]["messages"] = messages
-        
+        print("=" * 40)    
+        print(messages)
+        print("=" * 40)
         return messages
     
     def _window_messages(self, messages: list[dict]) -> list[dict]:
@@ -253,6 +255,9 @@ class ConversationManager:
         messages = self.get_context(session_id)
         
         # 调用API
+        print("="*60)
+        print(f"调用API: {messages}")
+        print("="*60)
         response = Generation.call(
             model="qwen-turbo",
             messages=messages,
