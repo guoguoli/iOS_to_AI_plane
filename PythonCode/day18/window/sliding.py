@@ -51,3 +51,49 @@ def summarize_old_messages(messages: list, llm_api_key: str) -> str:
     )
     
     return response["output"]["choices"][0]["message"]["content"]
+
+
+
+import sqlite3
+from datetime import datetime
+from typing import Optional
+
+class ConversationStore:
+    """会话存储管理器 - 类似Core Data的持久化方案"""
+    
+    def __init__(self, db_path: str = "conversations.db"):
+        self.conn = sqlite3.connect(db_path)
+        self._create_tables()
+    
+    def _create_tables(self):
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS conversations (
+                id TEXT PRIMARY KEY,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                metadata TEXT
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS messages (
+                id TEXT PRIMARY KEY,
+                conversation_id TEXT NOT NULL,
+                role TEXT NOT NULL,
+                content TEXT NOT NULL,
+                timestamp TEXT NOT NULL,
+                FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+            )
+        """)
+        self.conn.commit()
+    
+    def save_message(self, conversation_id: str, role: str, content: str) -> str:
+        """保存消息"""
+        message_id = f"msg_{datetime.now().timestamp()}"
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "INSERT INTO messages VALUES (?, ?, ?, ?, ?)",
+            (message_id, conversation_id, role, content, datetime.now().isoformat())
+        )
+        self.conn.commit()
+        return message_id
