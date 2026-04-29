@@ -26,8 +26,9 @@ import jwt
 # 全局常量配置模块
 # 作用：统一管理密钥、加密算法、全局参数，便于环境切换
 # ==============================================
-SECRET_KEY = "smart_homework_cd_edu_2026"  # 成都教育科技专属密钥
-ALGORITHM = "HS256"                       # JWT加密算法
+# 修复 JWT 密钥长度警告 -> 扩展为 >=32 字节
+SECRET_KEY = "smart_homework_cd_edu_2026_secure_key_32+"
+ALGORITHM = "HS256"
 
 # ==============================================
 # 枚举定义模块
@@ -141,9 +142,36 @@ class Persistence:
         cache_key = f"homework:{homework_id}"
         cache_data = self.redis_cache.get(cache_key)
         if cache_data:
-            return Homework(**cache_data)
+            # 修复核心BUG：从dict 还原为 Homework 对象（包含questions对象）
+            questions = [Question(**q) for q in cache_data["questions"]]
+            return Homework(
+                homework_id=cache_data["homework_id"],
+                student_id=cache_data["student_id"],
+                questions=questions,
+                student_answers=cache_data["student_answers"],
+                status=HomeworkStatus(cache_data["status"]),
+                ai_score=cache_data["ai_score"],
+                final_score=cache_data["final_score"],
+                review_comment=cache_data["review_comment"],
+                create_time=cache_data["create_time"],
+                update_time=cache_data["update_time"]
+            )
         db_data = self.homework_db.get(homework_id)
-        return Homework(**db_data) if db_data else None
+        if db_data:
+            questions = [Question(**q) for q in db_data["questions"]]
+            return Homework(
+                homework_id=db_data["homework_id"],
+                student_id=db_data["student_id"],
+                questions=questions,
+                student_answers=db_data["student_answers"],
+                status=HomeworkStatus(db_data["status"]),
+                ai_score=db_data["ai_score"],
+                final_score=db_data["final_score"],
+                review_comment=db_data["review_comment"],
+                create_time=db_data["create_time"],
+                update_time=db_data["update_time"]
+            )
+        return None
 
 # ==============================================
 # 观察者通知层 Observer
