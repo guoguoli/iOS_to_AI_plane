@@ -12,6 +12,9 @@ import json
 from datetime import datetime
 from typing import Optional
 from dashscope import Generation
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 class StudentProfile:
