@@ -33,7 +33,69 @@ class RAGResponse:
     usage: Dict[str, int]
     latency: float
 
-
+# 检索结果后处理
+class RetrievalOptimizer:
+    """检索优化"""
+    
+    @staticmethod
+    def deduplicate(results: List[RetrievalResult], threshold: float = 0.9) -> List[RetrievalResult]:
+        """去除重复结果"""
+        if not results:
+            return []
+        
+        unique = [results[0]]
+        for result in results[1:]:
+            is_duplicate = False
+            for existing in unique:
+                # 计算内容重叠度
+                overlap = RetrievalOptimizer._calculate_overlap(
+                    result.content, existing.content
+                )
+                if overlap > threshold:
+                    is_duplicate = True
+                    break
+            
+            if not is_duplicate:
+                unique.append(result)
+        
+        return unique
+    
+    @staticmethod
+    def _calculate_overlap(text1: str, text2: str) -> float:
+        """计算文本重叠度"""
+        set1 = set(text1.split())
+        set2 = set(text2.split())
+        
+        intersection = len(set1 & set2)
+        union = len(set1 | set2)
+        
+        return intersection / union if union > 0 else 0
+    
+    @staticmethod
+    def rerank_by_diversity(
+        results: List[RetrievalResult],
+        k: int = 3
+    ) -> List[RetrievalResult]:
+        """多样性重排序"""
+        if len(results) <= k:
+            return results
+        
+        selected = [results[0]]  # 保留最高分
+        
+        for result in results[1:]:
+            # 检查与已选结果的多样性
+            min_similarity = min([
+                RetrievalOptimizer._calculate_overlap(result.content, s.content)
+                for s in selected
+            ])
+            
+            if min_similarity < 0.7:  # 多样性阈值
+                selected.append(result)
+            
+            if len(selected) >= k:
+                break
+        
+        return selected
 class RAGPipeline:
     """RAG管道"""
     
