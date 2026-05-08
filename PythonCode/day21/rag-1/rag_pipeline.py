@@ -8,7 +8,7 @@ from datetime import datetime
 
 import dashscope
 from dashscope import Generation
-from dashscope.common.api_key import api_key as DASHSCOPE_API_KEY
+# from dashscope.common.api_key import api_key as DASHSCOPE_API_KEY
 
 from config import config
 from document_loader import DocumentLoader
