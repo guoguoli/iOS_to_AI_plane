@@ -28,7 +28,7 @@ class TextChunker:
         self.default_splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
-            length_function=length_function,
+            length_function=self.length_function,   # 修复：使用 self.length_function 而非原始的 None
             separators=["\n\n", "\n", "。", "！", "？", " ", ""]
         )
     
