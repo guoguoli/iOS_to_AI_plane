@@ -28,7 +28,7 @@ class VectorStoreManager:
         # 初始化嵌入模型（通义千问）
         self.embeddings = DashScopeEmbeddings(
             model=config.EMBEDDING_MODEL,
-            dash_api_key=config.DASHSCOPE_API_KEY
+            dashscope_api_key=config.DASHSCOPE_API_KEY
         )
         
         # 确保目录存在
@@ -79,8 +79,7 @@ class VectorStoreManager:
         # 添加文档
         self.vectorstore.add_documents(documents, ids=ids)
         
-        # 持久化
-        self.vectorstore.persist()
+        # 注意：新版 Chroma (>=0.4.x) 自动持久化，无需手动调用 persist()
         
         return ids
     
@@ -128,7 +127,7 @@ class VectorStoreManager:
     def delete(self, ids: List[str]) -> None:
         """删除文档"""
         self.vectorstore.delete(ids=ids)
-        self.vectorstore.persist()
+        # 新版 Chroma 自动持久化，无需手动 persist()
     
     def clear(self) -> None:
         """清空集合"""

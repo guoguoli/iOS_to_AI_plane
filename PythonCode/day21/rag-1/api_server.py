@@ -2,6 +2,7 @@
 FastAPI RAG服务
 """
 import json
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,10 +53,34 @@ class StatsResponse(BaseModel):
 
 # ============== 应用实例 ==============
 
+# 全局RAG管道
+rag_pipeline: Optional[RAGPipeline] = None
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理（启动 & 关闭）"""
+    global rag_pipeline
+
+    if not config.validate():
+        print("⚠️  配置验证失败，部分功能可能不可用")
+
+    rag_pipeline = RAGPipeline(
+        vector_store=get_vector_store(),
+        top_k=config.TOP_K
+    )
+    print("✅ RAG管道初始化完成")
+
+    yield  # 应用运行期间
+
+    # 关闭时的清理工作（如有需要可在此添加）
+
+
 app = FastAPI(
     title="智能教育问答系统 API",
     description="基于RAG的智能问答系统",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # CORS配置
@@ -66,24 +91,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# 全局RAG管道
-rag_pipeline: Optional[RAGPipeline] = None
-
-
-@app.on_event("startup")
-async def startup():
-    """启动时初始化"""
-    global rag_pipeline
-    
-    if not config.validate():
-        print("⚠️  配置验证失败，部分功能可能不可用")
-    
-    rag_pipeline = RAGPipeline(
-        vector_store=get_vector_store(),
-        top_k=config.TOP_K
-    )
-    print("✅ RAG管道初始化完成")
 
 
 @app.get("/", tags=["健康检查"])
