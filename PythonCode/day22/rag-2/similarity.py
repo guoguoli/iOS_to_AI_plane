@@ -28,3 +28,24 @@ def similarity_metrics(a: np.ndarray, b: np.ndarray) -> dict:
 #
 # 场景3：图像特征匹配
 # → 欧氏距离或余弦相似度都可以
+
+# 通义千问embedding的归一化设置
+from dashscope import TextEmbedding
+
+response = TextEmbedding.call(
+    model=TextEmbedding.models.text_embedding_v3,
+    input="RAG向量检索技术",
+    parameters={
+        "text_type": "document",  # 文档类型embedding
+        # "normalize": True  # 归一化后，点积 = 余弦相似度
+    }
+)
+
+embedding = response.output['embeddings'][0]['embedding']
+
+# 归一化后的向量
+normalized = embedding / np.linalg.norm(embedding)
+
+# 结论：
+# - 通义千问默认输出归一化向量
+# - 此时点积计算效率更高，效果等同于余弦相似度

@@ -1,0 +1,180 @@
+# 安装Chroma
+# pip install chromadb
+
+import chromadb
+from chromadb.config import Settings
+import os
+
+# 2.1.1 初始化Chroma客户端
+
+# 方式1：持久化存储（推荐）
+chroma_client = chromadb.PersistentClient(
+    path="./chroma_db"  # 本地存储路径
+)
+
+# 方式2：内存模式（仅用于测试，数据不持久化）
+chroma_client = chromadb.Client(
+    Settings(
+        chroma_db_impl="duckdb+parquet",
+        persist_directory="./chroma_db"
+    )
+)
+
+# 方式3：客户端-服务器模式
+# chroma_client = chromadb.HttpClient(host='localhost', port=8000)
+
+# 2.2.1 创建集合
+collection = chroma_client.create_collection(
+    name="education_knowledge_base",  # 集合名称（唯一）
+    metadata={
+        "description": "教育知识库集合",
+        "hnsw:space": "cosine",  # 距离度量：cosine/l2/ip（内积）
+        "hnsw:M": 16,             # HNSW参数
+        "hnsw:ef_construction": 200
+    }
+)
+
+# 2.2.2 获取已有集合
+collection = chroma_client.get_collection(name="education_knowledge_base")
+
+# 2.2.3 检查集合是否存在
+exists = chroma_client.collection_exists(name="education_knowledge_base")
+
+# 2.2.4 删除集合
+chroma_client.delete_collection(name="education_knowledge_base")
+
+# 2.2.5 列出所有集合
+all_collections = chroma_client.list_collections()
+for col in all_collections:
+    print(f"集合: {col.name}, 数据量: {col.count()}")
+    
+# 2.3.1 添加文档（Add）
+
+# 单个文档
+collection.add(
+    documents=["二次函数的求导公式是 f'(x) = 2ax + b"],
+    metadatas=[{"subject": "数学", "topic": "导数", "difficulty": "基础"}],
+    ids=["doc_001"]
+)
+
+# 批量添加
+batch_data = {
+    "ids": [f"doc_{i:03d}" for i in range(1, 101)],
+    "documents": [
+        "牛顿第二定律：F = ma",
+        "欧姆定律：V = IR",
+        "光的折射定律：n1·sinθ1 = n2·sinθ2",
+        # ... 更多文档
+    ],
+    "metadatas": [
+        {"subject": "物理", "topic": "力学", "difficulty": "中等"},
+        {"subject": "物理", "topic": "电学", "difficulty": "基础"},
+        {"subject": "物理", "topic": "光学", "difficulty": "中等"},
+        # ... 更多元数据
+    ],
+    "embeddings": None  # Chroma会自动调用embedding模型
+}
+
+collection.add(**batch_data)
+
+# 2.3.2 查询文档（Query）
+results = collection.query(
+    query_texts=["求导的基本法则有哪些？"],  # 查询文本
+    n_results=5,  # 返回前5个最相似结果
+    where={"difficulty": "中等"},  # 元数据过滤条件
+    where_document={"$contains": "导数"}  # 文档内容过滤
+)
+
+# 查询结果解析
+print(f"文档ID: {results['ids'][0]}")
+print(f"距离: {results['distances'][0]}")
+print(f"内容: {results['documents'][0]}")
+print(f"元数据: {results['metadatas'][0]}")
+
+# 2.3.3 更新文档（Update）
+collection.update(
+    ids=["doc_001"],
+    documents=["更新后的内容：二次函数求导公式"],
+    metadatas=[{"subject": "数学", "topic": "导数", "difficulty": "基础"}]
+)
+
+# 2.3.4 删除文档（Delete）
+collection.delete(ids=["doc_001"])  # 删除指定ID
+collection.delete(where={"subject": "物理"})  # 按条件删除
+
+# 2.3.5 获取集合统计
+count = collection.count()
+print(f"集合中共有 {count} 条文档")
+
+# Chroma 支持的过滤操作符
+
+# 2.4.1 基础比较
+collection.query(
+    query_texts=["..."],
+    where={
+        "difficulty": "中等",           # 等于
+        "rating": {"$gte": 4.5},        # 大于等于
+        "view_count": {"$lt": 1000},    # 小于
+    }
+)
+
+# 2.4.2 逻辑运算
+collection.query(
+    query_texts=["..."],
+    where={
+        "$and": [
+            {"subject": "数学"},
+            {"difficulty": {"$in": ["基础", "中等"]}}  # IN操作
+        ]
+    }
+)
+
+# 2.4.3 文档内容过滤
+collection.query(
+    query_texts=["..."],
+    where_document={
+        "$contains": "函数"  # 包含关键词
+    }
+)
+import dashscope
+from dashscope import TextEmbedding
+from chromadb.api.models.Collection import Collection
+
+# 配置API Key（建议使用环境变量）
+dashscope.api_key = os.getenv("DASHSCOPE_API_KEY")
+
+def qwen_embed_function(texts: list[str]) -> list[list[float]]:
+    """
+    通义千问embedding函数
+    用于Chroma的embedding parameter
+    """
+    response = TextEmbedding.call(
+        model=TextEmbedding.models.text_embedding_v3,
+        input=texts
+    )
+    
+    if response.status_code != 200:
+        raise ValueError(f"Embedding调用失败: {response.message}")
+    
+    embeddings = [
+        item['embedding'] for item in response.output['embeddings']
+    ]
+    return embeddings
+
+# 创建集合时指定embedding函数
+collection = chroma_client.create_collection(
+    name="knowledge_base",
+    embedding_function=qwen_embed_function  # 自定义embedding函数
+)
+
+# 添加文档（使用自定义embedding）
+collection.add(
+    documents=["RAG系统主要由检索和生成两部分组成"],
+    ids=["doc_001"]
+)
+
+# 查询时也会自动使用自定义embedding
+results = collection.query(
+    query_texts=["什么是RAG系统？"],
+    n_results=3
+)
