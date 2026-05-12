@@ -334,3 +334,52 @@ class MultiStageRetrieval:
         results = self.rerank(query, candidates, top_k=final_k)
         
         return results
+    
+"""
+查询改写的目的是：
+1. 扩写用户问题，获取更多相关上下文
+2. 处理模糊查询，提高召回率
+3. 适应知识库的表达方式
+
+常见策略：
+- Multi-Query: 一个问题生成多个查询
+- HyDE: 用LLM生成假设性答案再检索
+- Sub-Query: 分解为多个子问题
+"""
+
+# Multi-Query 实现
+MULTI_QUERY_PROMPT = """请将这个问题改写成3个不同的表述方式，
+保持原意但使用不同的词汇和句式，以便从多个角度检索相关信息。
+
+原问题：{query}
+
+改写后的3个问题（每行一个）："""
+
+def generate_multi_queries(query: str, llm_api) -> list[str]:
+    """生成多个查询表述"""
+    
+    prompt = MULTI_QUERY_PROMPT.format(query=query)
+    
+    response = llm_api.call(prompt)
+    queries = [q.strip() for q in response.split('\n') if q.strip()]
+    
+    return queries[:3]
+
+def multi_query_retrieval(query: str, collection, llm_api) -> list[dict]:
+    """多查询检索"""
+    
+    # 1. 生成多个查询
+    queries = generate_multi_queries(query, llm_api)
+    queries.append(query)  # 保留原查询
+    
+    # 2. 并行执行多个查询
+    all_results = []
+    for q in queries:
+        results = collection.query(
+            query_texts=[q],
+            n_results=10
+        )
+        all_results.extend(results['documents'][0])
+    
+    # 3. 去重并返回
+    return list(set(all_results))
