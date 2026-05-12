@@ -565,3 +565,61 @@ collection.query(
     n_results=10,
     where={"usage_count": {"$gt": 100}}  # 使用次数>100
 )
+
+"""
+上下文窗口管理的重要性
+
+通义千问上下文限制：
+- qwen-turbo: 8K tokens
+- qwen-plus: 32K tokens
+- qwen-max: 8K tokens
+
+如果检索结果超过限制，需要：
+1. 按相似度分数截断
+2. 智能压缩上下文
+3. 摘要式抽取关键信息
+"""
+
+class ContextManager:
+    """上下文管理器"""
+    
+    def __init__(self, max_tokens: int = 6000):
+        self.max_tokens = max_tokens
+    
+    def estimate_tokens(self, text: str) -> int:
+        """估算token数量（中文约1.5字符≈1 token）"""
+        return len(text) // 2
+    
+    def truncate_by_score(
+        self,
+        results: list[dict],
+        max_tokens: int = None
+    ) -> list[dict]:
+        """按分数和长度截断"""
+        
+        max_tokens = max_tokens or self.max_tokens
+        current_tokens = 0
+        selected = []
+        
+        for item in results:
+            tokens = self.estimate_tokens(item['document'])
+            if current_tokens + tokens <= max_tokens:
+                selected.append(item)
+                current_tokens += tokens
+        
+        return selected
+    
+    def compress_context(
+        self,
+        documents: list[str],
+        max_docs: int = 5
+    ) -> str:
+        """压缩上下文：取最相关的文档"""
+        
+        # 限制文档数量
+        selected = documents[:max_docs]
+        
+        return "\n\n".join([
+            f"【文档{i+1}】{doc}"
+            for i, doc in enumerate(selected)
+        ])
