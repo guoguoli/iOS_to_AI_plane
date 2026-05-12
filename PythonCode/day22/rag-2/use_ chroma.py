@@ -289,3 +289,48 @@ def evaluate_retrieval(
         "precision": precision,
         "mrr": mrr
     }
+
+# 多阶段检索实现
+class MultiStageRetrieval:
+    """多阶段检索器"""
+    
+    def __init__(self, vector_store):
+        self.vector_store = vector_store
+    
+    def coarse_retrieval(self, query: str, top_k: int = 100) -> list[dict]:
+        """第一阶段：粗检索，快速召回候选"""
+        
+        results = self.vector_store.query(
+            query_texts=[query],
+            n_results=top_k,
+            include=["documents", "metadatas", "distances"]
+        )
+        
+        return self._format_results(results)
+    
+    def rerank(self, query: str, candidates: list[dict], top_k: int = 10) -> list[dict]:
+        """第二阶段：重排序，使用交叉编码器精排"""
+        
+        # 方法1：基于相似度分数重排
+        scored = []
+        for item in candidates:
+            score = item.get('score', 0)
+            # 加入其他特征（BM25分数、关键词匹配等）
+            bonus = self._keyword_bonus(query, item['document'])
+            scored.append({**item, 'final_score': score + bonus})
+        
+        # 按最终分数排序
+        scored.sort(key=lambda x: x['final_score'], reverse=True)
+        
+        return scored[:top_k]
+    
+    def retrieve(self, query: str, final_k: int = 5) -> list[dict]:
+        """完整的多阶段检索流程"""
+        
+        # 阶段1：粗检索
+        candidates = self.coarse_retrieval(query, top_k=100)
+        
+        # 阶段2：重排序
+        results = self.rerank(query, candidates, top_k=final_k)
+        
+        return results
