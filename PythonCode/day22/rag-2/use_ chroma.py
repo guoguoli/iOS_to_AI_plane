@@ -525,3 +525,43 @@ class HybridSearch:
             })
         
         return final_results
+    
+"""
+元数据过滤实战场景
+
+场景1：教育题库 - 按难度筛选
+场景2：医疗知识库 - 按科室筛选
+场景3：产品库 - 按品牌/价格区间筛选
+"""
+
+# 教育题库元数据设计
+question_metadata = {
+    "subject": "数学",           # 学科
+    "grade": "高二",             # 年级
+    "topic": "导数",             # 知识点
+    "difficulty": "中等",        # 难度
+    "question_type": "解答题",   # 题型
+    "tags": ["求导", "函数"],    # 标签
+    "usage_count": 1523,         # 使用次数（用于热门推荐）
+    "last_updated": "2024-01-15" # 更新时间
+}
+
+# 过滤示例：找到高二年级的导数中等难度题目
+collection.query(
+    query_texts=["如何求复合函数的导数？"],
+    n_results=10,
+    where={
+        "$and": [
+            {"grade": {"$eq": "高二"}},
+            {"topic": {"$eq": "导数"}},
+            {"difficulty": {"$in": ["中等", "困难"]}}
+        ]
+    }
+)
+
+# 热门题目推荐（基于使用次数）
+collection.query(
+    query_texts=["概率计算"],
+    n_results=10,
+    where={"usage_count": {"$gt": 100}}  # 使用次数>100
+)
