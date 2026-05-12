@@ -13,35 +13,31 @@ chroma_client = chromadb.PersistentClient(
 )
 
 # 方式2：内存模式（仅用于测试，数据不持久化）
-chroma_client = chromadb.Client(
-    Settings(
-        chroma_db_impl="duckdb+parquet",
-        persist_directory="./chroma_db"
-    )
-)
+# 新版 chromadb 的写法，旧版的 Settings(chroma_db_impl=...) 已废弃
+chroma_client = chromadb.EphemeralClient()
 
 # 方式3：客户端-服务器模式
 # chroma_client = chromadb.HttpClient(host='localhost', port=8000)
 
 # 2.2.1 创建集合
+# 注意：新版 chromadb 中 hnsw:M / hnsw:ef_construction 不能放 metadata，
+# 只支持 hnsw:space 等少量配置在 metadata 里
 collection = chroma_client.create_collection(
     name="education_knowledge_base",  # 集合名称（唯一）
     metadata={
         "description": "教育知识库集合",
         "hnsw:space": "cosine",  # 距离度量：cosine/l2/ip（内积）
-        "hnsw:M": 16,             # HNSW参数
-        "hnsw:ef_construction": 200
     }
 )
+print("✅ 创建集合成功")
 
 # 2.2.2 获取已有集合
 collection = chroma_client.get_collection(name="education_knowledge_base")
 
-# 2.2.3 检查集合是否存在
-exists = chroma_client.collection_exists(name="education_knowledge_base")
-
-# 2.2.4 删除集合
-chroma_client.delete_collection(name="education_knowledge_base")
+# 2.2.3 检查集合是否存在（新版API：用 list_collections 判断）
+existing_names = [c.name for c in chroma_client.list_collections()]
+exists = "education_knowledge_base" in existing_names
+print(f"✅ 集合是否存在: {exists}")
 
 # 2.2.5 列出所有集合
 all_collections = chroma_client.list_collections()
@@ -49,43 +45,55 @@ for col in all_collections:
     print(f"集合: {col.name}, 数据量: {col.count()}")
     
 # 2.3.1 添加文档（Add）
+# 注意：不指定 embedding_function 时，Chroma 默认会下载 all-MiniLM-L6-v2 模型（需联网）
+# 为了演示，这里直接传入预先生成的 embeddings（维度1536 模拟 dashscope text-embedding-v3）
+import random
+random.seed(42)
+
+def mock_embedding(dim: int = 1536) -> list[float]:
+    """生成随机单位向量（仅演示用，生产环境请替换为真实 embedding）"""
+    vec = [random.gauss(0, 1) for _ in range(dim)]
+    norm = sum(x**2 for x in vec) ** 0.5
+    return [x / norm for x in vec]
 
 # 单个文档
 collection.add(
     documents=["二次函数的求导公式是 f'(x) = 2ax + b"],
+    embeddings=[mock_embedding()],
     metadatas=[{"subject": "数学", "topic": "导数", "difficulty": "基础"}],
     ids=["doc_001"]
 )
+print("✅ 单条文档添加成功")
 
-# 批量添加
+# 批量添加（文档、元数据、ids 数量必须一致）
 batch_data = {
-    "ids": [f"doc_{i:03d}" for i in range(1, 101)],
+    "ids": ["doc_101", "doc_102", "doc_103"],
     "documents": [
         "牛顿第二定律：F = ma",
         "欧姆定律：V = IR",
         "光的折射定律：n1·sinθ1 = n2·sinθ2",
-        # ... 更多文档
     ],
+    "embeddings": [mock_embedding(), mock_embedding(), mock_embedding()],
     "metadatas": [
         {"subject": "物理", "topic": "力学", "difficulty": "中等"},
         {"subject": "物理", "topic": "电学", "difficulty": "基础"},
         {"subject": "物理", "topic": "光学", "difficulty": "中等"},
-        # ... 更多元数据
     ],
-    "embeddings": None  # Chroma会自动调用embedding模型
 }
 
 collection.add(**batch_data)
+print("✅ 批量文档添加成功")
 
 # 2.3.2 查询文档（Query）
+# 传 query_embeddings 代替 query_texts，绕过自动 embedding 下载
 results = collection.query(
-    query_texts=["求导的基本法则有哪些？"],  # 查询文本
-    n_results=5,  # 返回前5个最相似结果
-    where={"difficulty": "中等"},  # 元数据过滤条件
-    where_document={"$contains": "导数"}  # 文档内容过滤
+    query_embeddings=[mock_embedding()],  # 生产环境用 DashScope embedding
+    n_results=2,  # 返回前2个最相似结果
+    where={"subject": "数学"},  # 元数据过滤条件
 )
 
 # 查询结果解析
+print(f"\n🔍 查询结果：")
 print(f"文档ID: {results['ids'][0]}")
 print(f"距离: {results['distances'][0]}")
 print(f"内容: {results['documents'][0]}")
@@ -94,13 +102,11 @@ print(f"元数据: {results['metadatas'][0]}")
 # 2.3.3 更新文档（Update）
 collection.update(
     ids=["doc_001"],
-    documents=["更新后的内容：二次函数求导公式"],
+    documents=["更新后的内容：二次函数求导公式 f'(x) = 2ax + b"],
+    embeddings=[mock_embedding()],
     metadatas=[{"subject": "数学", "topic": "导数", "difficulty": "基础"}]
 )
-
-# 2.3.4 删除文档（Delete）
-collection.delete(ids=["doc_001"])  # 删除指定ID
-collection.delete(where={"subject": "物理"})  # 按条件删除
+print("\n✅ 文档更新成功")
 
 # 2.3.5 获取集合统计
 count = collection.count()
@@ -109,33 +115,36 @@ print(f"集合中共有 {count} 条文档")
 # Chroma 支持的过滤操作符
 
 # 2.4.1 基础比较
-collection.query(
-    query_texts=["..."],
+results2 = collection.query(
+    query_embeddings=[mock_embedding()],
+    n_results=2,
     where={
-        "difficulty": "中等",           # 等于
-        "rating": {"$gte": 4.5},        # 大于等于
-        "view_count": {"$lt": 1000},    # 小于
+        "subject": "物理",           # 等于
     }
 )
+print(f"\n🔍 过滤查询结果(物理): {results2['documents'][0]}")
 
 # 2.4.2 逻辑运算
-collection.query(
-    query_texts=["..."],
+results3 = collection.query(
+    query_embeddings=[mock_embedding()],
+    n_results=3,
     where={
         "$and": [
-            {"subject": "数学"},
+            {"subject": "物理"},
             {"difficulty": {"$in": ["基础", "中等"]}}  # IN操作
         ]
     }
 )
+print(f"🔍 逻辑运算查询结果: {results3['documents'][0]}")
 
-# 2.4.3 文档内容过滤
-collection.query(
-    query_texts=["..."],
-    where_document={
-        "$contains": "函数"  # 包含关键词
-    }
-)
+# 2.3.4 删除文档（Delete）
+collection.delete(ids=["doc_001"])  # 删除指定ID
+print(f"\n✅ 删除doc_001后，集合共有 {collection.count()} 条文档")
+
+# 2.2.4 删除集合（放在最后演示）
+chroma_client.delete_collection(name="education_knowledge_base")
+print("✅ 集合已删除")
+
 import dashscope
 from dashscope import TextEmbedding
 from chromadb.api.models.Collection import Collection
@@ -162,22 +171,26 @@ def qwen_embed_function(texts: list[str]) -> list[list[float]]:
     return embeddings
 
 # 创建集合时指定embedding函数
+# 生产环境：embedding_function=qwen_embed_function
+# 演示环境：不传 embedding_function，手动传 embeddings
 collection = chroma_client.create_collection(
     name="knowledge_base",
-    embedding_function=qwen_embed_function  # 自定义embedding函数
 )
 
-# 添加文档（使用自定义embedding）
+# 添加文档（演示用 mock embedding，生产环境由 qwen_embed_function 自动生成）
 collection.add(
     documents=["RAG系统主要由检索和生成两部分组成"],
+    embeddings=[mock_embedding()],
     ids=["doc_001"]
 )
+print("✅ knowledge_base 文档添加成功")
 
-# 查询时也会自动使用自定义embedding
+# 查询时传 query_embeddings（生产环境可改回 query_texts + 自定义 embedding_function）
 results = collection.query(
-    query_texts=["什么是RAG系统？"],
-    n_results=3
+    query_embeddings=[mock_embedding()],
+    n_results=1
 )
+print(f"✅ knowledge_base 查询结果: {results['documents'][0]}")
 # 2.6.1 批量操作优化
 def batch_import_documents(
     collection: Collection,
@@ -541,30 +554,9 @@ question_metadata = {
     "topic": "导数",             # 知识点
     "difficulty": "中等",        # 难度
     "question_type": "解答题",   # 题型
-    "tags": ["求导", "函数"],    # 标签
     "usage_count": 1523,         # 使用次数（用于热门推荐）
     "last_updated": "2024-01-15" # 更新时间
 }
-
-# 过滤示例：找到高二年级的导数中等难度题目
-collection.query(
-    query_texts=["如何求复合函数的导数？"],
-    n_results=10,
-    where={
-        "$and": [
-            {"grade": {"$eq": "高二"}},
-            {"topic": {"$eq": "导数"}},
-            {"difficulty": {"$in": ["中等", "困难"]}}
-        ]
-    }
-)
-
-# 热门题目推荐（基于使用次数）
-collection.query(
-    query_texts=["概率计算"],
-    n_results=10,
-    where={"usage_count": {"$gt": 100}}  # 使用次数>100
-)
 
 """
 上下文窗口管理的重要性
@@ -623,3 +615,69 @@ class ContextManager:
             f"【文档{i+1}】{doc}"
             for i, doc in enumerate(selected)
         ])
+
+"""
+重排序策略
+
+1. 基于相似度分数简单排序
+2. 基于多样性的排序（避免内容重复）
+3. 基于业务规则的排序（如热门优先）
+4. 基于学习排序模型（如BGE-Reranker）
+"""
+
+class Reranker:
+    """检索结果重排序"""
+    
+    def __init__(self, llm_api):
+        self.llm_api = llm_api
+    
+    def rerank_by_diversity(
+        self,
+        results: list[dict],
+        max_similar: float = 0.9
+    ) -> list[dict]:
+        """基于多样性重排：降低相似文档的排名"""
+        
+        reranked = []
+        used_topics = set()
+        
+        for item in results:
+            topic = item.get('metadata', {}).get('topic', '')
+            
+            # 如果主题重复，降低优先级
+            if topic in used_topics:
+                item['adjusted_score'] = item.get('score', 0) * 0.8
+            else:
+                item['adjusted_score'] = item.get('score', 0)
+                used_topics.add(topic)
+            
+            reranked.append(item)
+        
+        return sorted(reranked, key=lambda x: x['adjusted_score'], reverse=True)
+    
+    def rerank_by_business_rules(
+        self,
+        results: list[dict],
+        rules: list[dict]
+    ) -> list[dict]:
+        """基于业务规则重排"""
+        
+        for item in results:
+            score = item.get('score', 0)
+            metadata = item.get('metadata', {})
+            
+            # 规则1：热门内容加权
+            if metadata.get('usage_count', 0) > 1000:
+                score *= 1.1
+            
+            # 规则2：新内容加权
+            # if metadata.get('is_new', False):
+            #     score *= 1.2
+            
+            # 规则3：名师内容加权
+            if metadata.get('is_premium', False):
+                score *= 1.15
+            
+            item['final_score'] = score
+        
+        return sorted(results, key=lambda x: x['final_score'], reverse=True)
