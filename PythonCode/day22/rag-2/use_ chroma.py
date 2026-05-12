@@ -178,3 +178,63 @@ results = collection.query(
     query_texts=["什么是RAG系统？"],
     n_results=3
 )
+# 2.6.1 批量操作优化
+def batch_import_documents(
+    collection: Collection,
+    documents: list[str],
+    metadatas: list[dict],
+    batch_size: int = 100
+):
+    """批量导入文档（分批处理）"""
+    
+    total = len(documents)
+    for i in range(0, total, batch_size):
+        batch_docs = documents[i:i + batch_size]
+        batch_meta = metadatas[i:i + batch_size]
+        batch_ids = [f"doc_{i + j}" for j in range(len(batch_docs))]
+        
+        collection.add(
+            documents=batch_docs,
+            metadatas=batch_meta,
+            ids=batch_ids
+        )
+        
+        print(f"进度: {min(i + batch_size, total)}/{total}")
+
+# 2.6.2 HNSW参数优化
+def create_optimized_collection(
+    client,
+    name: str,
+    data_scale: int = 10000
+):
+    """根据数据规模创建优化后的集合"""
+    
+    # 根据数据规模调整HNSW参数
+    if data_scale < 1000:
+        hnsw_config = {"M": 16, "efConstruction": 100}
+    elif data_scale < 100000:
+        hnsw_config = {"M": 32, "efConstruction": 200}
+    else:
+        hnsw_config = {"M": 48, "efConstruction": 400}
+    
+    return client.create_collection(
+        name=name,
+        metadata={
+            "hnsw:space": "cosine",
+            **hnsw_config
+        }
+    )
+
+# 2.6.3 异步写入（生产环境）
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
+
+def parallel_embedding(texts: list[str], workers: int = 4) -> list:
+    """并行获取embedding"""
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        futures = [
+            executor.submit(qwen_embed_function, [text])
+            for text in texts
+        ]
+        results = [f.result()[0] for f in futures]
+    return results
