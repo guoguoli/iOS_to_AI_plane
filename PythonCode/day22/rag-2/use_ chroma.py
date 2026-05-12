@@ -681,3 +681,150 @@ class Reranker:
             item['final_score'] = score
         
         return sorted(results, key=lambda x: x['final_score'], reverse=True)
+    
+"""
+分块策略对比
+
+1. 固定窗口分块（Day21已讲）
+   - 优点：简单
+   - 缺点：可能切断语义
+
+2. 重叠窗口分块（改进版）
+   - 增加块之间的重叠区域
+   - 保持语义连贯
+
+3. 语义分块（高级）
+   - 按段落/章节自然分割
+   - 保持完整的语义单元
+
+4. 结构感知分块
+   - 保留标题层级结构
+   - 适合教材、文档等
+"""
+
+class AdvancedChunker:
+    """高级分块器"""
+    
+    def chunk_with_overlap(
+        self,
+        text: str,
+        chunk_size: int = 500,
+        overlap: int = 100
+    ) -> list[dict]:
+        """重叠窗口分块"""
+        
+        chunks = []
+        start = 0
+        chunk_id = 0
+        
+        while start < len(text):
+            end = start + chunk_size
+            chunk = text[start:end]
+            
+            chunks.append({
+                'content': chunk,
+                'start_pos': start,
+                'end_pos': end,
+                'chunk_id': f"chunk_{chunk_id}"
+            })
+            
+            # 滑动窗口：移动 chunk_size - overlap
+            start += chunk_size - overlap
+            chunk_id += 1
+        
+        return chunks
+    
+    def semantic_chunk(
+        self,
+        text: str,
+        min_chunk_size: int = 200
+    ) -> list[dict]:
+        """语义分块：按段落分割"""
+        
+        # 按段落分割
+        paragraphs = text.split('\n\n')
+        
+        chunks = []
+        current_chunk = []
+        current_size = 0
+        
+        for para in paragraphs:
+            para_size = len(para)
+            
+            if current_size + para_size > min_chunk_size and current_chunk:
+                # 合并当前块
+                chunks.append({
+                    'content': '\n\n'.join(current_chunk),
+                    'chunk_id': f"semantic_{len(chunks)}"
+                })
+                current_chunk = []
+                current_size = 0
+            
+            current_chunk.append(para)
+            current_size += para_size
+        
+        # 处理最后一个块
+        if current_chunk:
+            chunks.append({
+                'content': '\n\n'.join(current_chunk),
+                'chunk_id': f"semantic_{len(chunks)}"
+            })
+        
+        return chunks
+    """
+RAG提示词模板最佳实践
+
+核心原则：
+1. 明确引用检索结果
+2. 要求基于上下文回答
+3. 不知道时明确说明
+4. 分步骤思考（如需要）
+"""
+
+RAG_PROMPT_TEMPLATE = """你是一个专业的教育助手。请根据以下检索到的知识内容，
+回答用户的问题。
+
+【检索到的知识内容】
+{context}
+
+【用户问题】
+{question}
+
+【回答要求】
+1. 基于上述检索内容进行回答
+2. 如果检索内容不足以回答问题，请明确说明
+3. 答案要准确、专业、易于理解
+4. 可以引用检索内容中的具体信息
+
+【回答格式】
+请直接给出答案，必要时可用表格或列表呈现。
+"""
+
+# 数学辅导专用模板
+MATH_TUTOR_PROMPT = """你是数学辅导老师。请根据以下题目信息，
+为学生提供详细的解题指导。
+
+【题目】
+{question}
+
+【相关知识点】
+{context}
+
+【解题指导要求】
+1. 明确解题思路和方法
+2. 给出关键步骤
+3. 指出常见错误
+4. 总结解题规律
+"""
+
+def build_rag_prompt(
+    question: str,
+    context: str,
+    template: str = RAG_PROMPT_TEMPLATE
+) -> str:
+    """构建RAG提示词"""
+    
+    return template.format(
+        question=question,
+        context=context
+    )
