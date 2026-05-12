@@ -238,3 +238,54 @@ def parallel_embedding(texts: list[str], workers: int = 4) -> list:
         ]
         results = [f.result()[0] for f in futures]
     return results
+"""
+关键指标定义
+
+1. 召回率（Recall@K）
+   - 正确结果中被检索到的比例
+   - Recall@K = |Relevant ∩ Retrieved@K| / |Relevant|
+   
+2. 精确率（Precision@K）
+   - 检索结果中正确的比例
+   - Precision@K = |Relevant ∩ Retrieved@K| / K
+   
+3. MRR（Mean Reciprocal Rank）
+   - 第一个正确答案排名的倒数平均值
+   - MRR = (1/N) × Σ(1/rank_i)
+   
+4. NDCG（Normalized Discounted Cumulative Gain）
+   - 考虑排名位置的打分指标
+   - NDCG = DCG / IDCG
+
+【重点】RAG场景推荐指标组合：
+- 离线评估：Recall@10 + MRR
+- 在线评估：用户满意度 + 答案准确率
+"""
+
+def evaluate_retrieval(
+    retrieved_ids: list[str],
+    relevant_ids: set[str],
+    k: int = 10
+) -> dict:
+    """计算检索评估指标"""
+    
+    retrieved_at_k = set(retrieved_ids[:k])
+    
+    # 召回率
+    recall = len(retrieved_at_k & relevant_ids) / len(relevant_ids)
+    
+    # 精确率
+    precision = len(retrieved_at_k & relevant_ids) / k
+    
+    # MRR
+    mrr = 0
+    for i, doc_id in enumerate(retrieved_ids[:k]):
+        if doc_id in relevant_ids:
+            mrr = 1 / (i + 1)
+            break
+    
+    return {
+        "recall": recall,
+        "precision": precision,
+        "mrr": mrr
+    }
