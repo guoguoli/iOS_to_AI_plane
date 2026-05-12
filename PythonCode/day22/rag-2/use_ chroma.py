@@ -336,18 +336,15 @@ class MultiStageRetrieval:
         return results
     
 """
-查询改写的目的是：
-1. 扩写用户问题，获取更多相关上下文
-2. 处理模糊查询，提高召回率
-3. 适应知识库的表达方式
-
-常见策略：
-- Multi-Query: 一个问题生成多个查询
-- HyDE: 用LLM生成假设性答案再检索
-- Sub-Query: 分解为多个子问题
+查询改写三大策略：
+1. Multi-Query：生成多个相似问题 → 扩大检索角度
+2. HyDE：先生成假答案 → 用答案去检索（更准）
+3. Sub-Query：拆分子问题 → 复杂问题拆解检索
 """
 
-# Multi-Query 实现
+# ======================
+# 1. Multi-Query（你原来的，我保留）
+# ======================
 MULTI_QUERY_PROMPT = """请将这个问题改写成3个不同的表述方式，
 保持原意但使用不同的词汇和句式，以便从多个角度检索相关信息。
 
@@ -356,30 +353,175 @@ MULTI_QUERY_PROMPT = """请将这个问题改写成3个不同的表述方式，
 改写后的3个问题（每行一个）："""
 
 def generate_multi_queries(query: str, llm_api) -> list[str]:
-    """生成多个查询表述"""
-    
     prompt = MULTI_QUERY_PROMPT.format(query=query)
-    
     response = llm_api.call(prompt)
     queries = [q.strip() for q in response.split('\n') if q.strip()]
-    
     return queries[:3]
 
+# ======================
+# 2. HyDE 核心代码（新增）
+# ======================
+HYDE_PROMPT = """请根据问题，直接生成一段简短、专业、准确的回答，
+不要多余解释，我要用这段文字去检索知识库。
+
+问题：{query}
+
+回答："""
+
+def generate_hyde_document(query: str, llm_api) -> str:
+    """HyDE：生成假设性答案"""
+    prompt = HYDE_PROMPT.format(query=query)
+    answer = llm_api.call(prompt).strip()
+    return answer
+
+# ======================
+# 3. Sub-Query 核心代码（新增）
+# ======================
+SUB_QUERY_PROMPT = """请将复杂问题拆解成 2～4 个简单、独立、可直接检索的小问题。
+
+复杂问题：{query}
+
+拆解后的子问题（每行一个）："""
+
+def generate_sub_queries(query: str, llm_api) -> list[str]:
+    """拆分成多个子问题"""
+    prompt = SUB_QUERY_PROMPT.format(query=query)
+    response = llm_api.call(prompt)
+    sub_queries = [q.strip() for q in response.split('\n') if q.strip()]
+    return sub_queries
+
+# ======================
+# 三大检索函数（完整）
+# ======================
+
 def multi_query_retrieval(query: str, collection, llm_api) -> list[dict]:
-    """多查询检索"""
-    
-    # 1. 生成多个查询
+    """多查询检索：扩大角度"""
     queries = generate_multi_queries(query, llm_api)
-    queries.append(query)  # 保留原查询
-    
-    # 2. 并行执行多个查询
+    queries.append(query)
     all_results = []
     for q in queries:
-        results = collection.query(
-            query_texts=[q],
-            n_results=10
-        )
-        all_results.extend(results['documents'][0])
-    
-    # 3. 去重并返回
+        res = collection.query(query_texts=[q], n_results=10)
+        all_results.extend(res["documents"][0])
     return list(set(all_results))
+
+def hyde_retrieval(query: str, collection, llm_api) -> list[dict]:
+    """HyDE 检索：用生成的假答案去搜，精度极高"""
+    fake_answer = generate_hyde_document(query, llm_api)
+    res = collection.query(query_texts=[fake_answer], n_results=15)
+    return res["documents"][0]
+
+def sub_query_retrieval(query: str, collection, llm_api) -> list[dict]:
+    """子问题检索：拆解复杂问题"""
+    sub_queries = generate_sub_queries(query, llm_api)
+    all_results = []
+    for q in sub_queries:
+        res = collection.query(query_texts=[q], n_results=8)
+        all_results.extend(res["documents"][0])
+    return list(set(all_results))
+
+
+"""
+混合检索 = 关键词检索 + 向量检索
+
+优势：
+- 关键词检索：精准匹配专业术语（如数学公式）
+- 向量检索：理解语义相似性
+- 结合两者：兼顾精确性和语义理解
+
+RRF（倒数秩融合）算法：
+score_doc = Σ(1/(k + rank_i)) for i in queries
+k 通常取60
+"""
+
+from collections import defaultdict
+
+def reciprocal_rank_fusion(
+    result_lists: list[list[tuple]],
+    k: int = 60
+) -> list[tuple]:
+    """
+    倒数秩融合算法
+    
+    Args:
+        result_lists: 多个检索结果列表，每个列表是 (doc_id, score) 的元组
+        k: 融合参数，通常60
+    
+    Returns:
+        按RRF分数排序的文档列表
+    """
+    
+    doc_scores = defaultdict(float)
+    
+    for result_list in result_lists:
+        for rank, (doc_id, _) in enumerate(result_list):
+            # RRF公式: 1 / (k + rank)
+            doc_scores[doc_id] += 1 / (k + rank)
+    
+    # 按RRF分数排序
+    sorted_docs = sorted(
+        doc_scores.items(),
+        key=lambda x: x[1],
+        reverse=True
+    )
+    
+    return sorted_docs
+
+# BM25 + 向量检索的混合实现
+class HybridSearch:
+    """混合搜索器"""
+    
+    def __init__(self, collection, vector_store):
+        self.collection = collection
+        self.vector_store = vector_store
+    
+    def keyword_search(self, query: str, top_k: int = 20) -> list[tuple]:
+        """BM25关键词检索（Chroma内置支持）"""
+        
+        results = self.collection.query(
+            query_texts=[query],
+            n_results=top_k,
+            where_document={"$contains": query.split()[0]}  # 简单关键词过滤
+        )
+        
+        return list(zip(
+            results['ids'][0],
+            [1 / (i + 1) for i in range(len(results['ids'][0]))]  # 简化的排名分数
+        ))
+    
+    def vector_search(self, query: str, top_k: int = 20) -> list[tuple]:
+        """向量检索"""
+        
+        results = self.collection.query(
+            query_texts=[query],
+            n_results=top_k
+        )
+        
+        # 转换为 (id, distance) 格式
+        return list(zip(
+            results['ids'][0],
+            results['distances'][0]
+        ))
+    
+    def hybrid_search(self, query: str, top_k: int = 10) -> list[dict]:
+        """混合检索主流程"""
+        
+        # 1. 分别执行两种检索
+        keyword_results = self.keyword_search(query, top_k=30)
+        vector_results = self.vector_search(query, top_k=30)
+        
+        # 2. RRF融合
+        fused = reciprocal_rank_fusion([keyword_results, vector_results])
+        
+        # 3. 返回最终结果
+        final_results = []
+        for doc_id, rrf_score in fused[:top_k]:
+            # 获取文档详情
+            doc = self.collection.get(ids=[doc_id])
+            final_results.append({
+                'id': doc_id,
+                'document': doc['documents'][0],
+                'metadata': doc['metadatas'][0],
+                'rrf_score': rrf_score
+            })
+        
+        return final_results
